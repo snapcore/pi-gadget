@@ -14,8 +14,6 @@ ifeq ($(ARCH),arm64)
 MKIMAGE_ARCH := arm64
 else ifeq ($(ARCH),armhf)
 MKIMAGE_ARCH := arm
-else
-$(error Build architecture is not supported)
 endif
 
 # Some trivial comparator macros; please note that these are very simplistic
@@ -39,7 +37,10 @@ gt = $(and $(call ge,$(1),$(2)),$(call ne,$(1),$(2)))
 KERNEL_FLAVOR := $(if $(call gt,$(SERIES_RELEASE),18.04),raspi,raspi2)
 FIRMWARE_FLAVOR := $(if $(call ge,$(SERIES_RELEASE),22.04),raspi,raspi2)
 
+KERNEL_VERSION := $(shell linux-version list | grep $(KERNEL_FLAVOR) | linux-version sort | tail -1)
+
 # Download the latest version of package $1 for architecture $(ARCH), unpacking
+#
 # it into $(STAGEDIR). If you rely on this macro, your recipe must also rely on
 # the $(SOURCES_RESTRICTED) target. For example, the following invocation will
 # download the latest version of u-boot-rpi for armhf, and unpack it under
@@ -86,9 +87,9 @@ endef
 
 default: server
 
-server: firmware uboot boot-script config-server device-trees gadget
+server: firmware uboot boot-script config-server device-trees kernel-initrd gadget
 
-desktop: firmware uboot boot-script config-desktop device-trees gadget
+desktop: firmware uboot boot-script config-desktop device-trees kernel-initrd gadget
 
 core: firmware uboot boot-script config-core device-trees gadget
 
@@ -231,6 +232,12 @@ device-trees: $(SOURCES_RESTRICTED) $(DESTDIR)/boot-assets
 	cp -a $$(find $(STAGEDIR)/lib/firmware/*/device-tree \
 		-name "*.dtbo" -o -name "overlay_map.dtb") \
 		$(DESTDIR)/boot-assets/overlays/
+
+kernel-initrd:
+	# Update the kernel version in extra_content.yaml
+	sed \
+		-e "s/@@KERNEL_VERSION@@/$(KERNEL_VERSION)/g" \
+		extra_content.yaml >> gadget.yaml
 
 gadget:
 	mkdir -p $(DESTDIR)/meta
